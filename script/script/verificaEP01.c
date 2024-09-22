@@ -5,6 +5,7 @@
 int main() {
 
   int n, ULPs;
+  long long int FLOPs;
   double EAapD, EAexD, PI1D, PI2D;
   int64_t EAapH, EAexH, PI1H, PI2H;
 
@@ -13,7 +14,8 @@ int main() {
       scanf("%lf %llX\n", &EAexD, &EAexH) != 2 ||
       scanf("%lf %llX\n", &PI1D, &PI1H)   != 2 ||
       scanf("%lf %llX\n", &PI2D, &PI2H)   != 2 ||
-      scanf("%d", &ULPs) != 1) {
+      scanf("%d", &ULPs)    != 1 ||
+      scanf("%lld", &FLOPs) != 1) {
     printf("Formato de saída INCORRETO\n");
     exit(1);
   }
@@ -24,5 +26,6 @@ int main() {
   printf("PI'  = %.15e (%llX)\n", PI1D, PI1H);
   printf("PI'' = %.15e (%llX)\n", PI2D, PI2H);
   printf("ULPs = %d\n", ULPs);
+  printf("FLOPs = %lld\n", FLOPs);
   printf("Formato de saída correto!\n");
 }
