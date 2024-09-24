@@ -1,0 +1,6 @@
+Pedro Amaral Chapelin
+
+ O programa funciona como deveria até a tolerância de 1e-19, com
+tolerâncias menores (1e-20, 1e-21, ...) os valores de pi aproximados
+calculados com arredondamento para baixo e para cima ficam iguais,
+logo, o valor das ULP's entre os dois fica 0, já que são iguais.

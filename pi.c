@@ -6,86 +6,187 @@
 #include <fenv.h>
 #include <gmp.h>
 
-#define M_PI 3.14159265358979323846
+#define M_PI 3.14159265358979323846 // M_PI da math.h não tava funcionando, copiei a linha e defini aqui
 
-void fatorial(mpf_t resultado, int n, long long int *flops) 
+// Função que arredonda o último bit da tolerância pra cima
+void arredonda_cima_tolerancia(mpf_t resultado, const mpf_t input, const mpf_t tolerancia) 
 {
-    mpf_set_ui(resultado, 1);
+    mp_exp_t exp;
+    mpf_get_str(NULL, &exp, 10, 0, tolerancia);
+    unsigned int precision = -exp;
 
-    for (int i = 1; i <= n; i++)
-    {
-        mpf_mul_ui(resultado, resultado, i);
-        (*flops)++;
-    }
+    mpf_t escala, temp;
+    mpf_init(escala);
+    mpf_init(temp);
+
+    // Define a escala como 10^precisão
+    mpf_set_ui(escala, 10);
+    mpf_pow_ui(escala, escala, precision);
+
+    // Multiplica o valor pela escala
+    mpf_mul(temp, input, escala);
+
+    // Arredonda para o inteiro mais próximo para cima
+    mpf_ceil(temp, temp);
+
+    // Divide de volta pela escala
+    mpf_div(temp, temp, escala);
+
+    // Define o resultado
+    mpf_set(resultado, temp);
+}
+
+// Função que arredonda o último bit da tolerância pra baixo
+void arredonda_baixo_tolerancia(mpf_t resultado, const mpf_t input, const mpf_t tolerancia) 
+{
+    mp_exp_t exp;
+    mpf_get_str(NULL, &exp, 10, 0, tolerancia);
+    unsigned int precisao = -exp;
+
+    mpf_t escala, temp;
+    mpf_init(escala);
+    mpf_init(temp);
+
+    // Define a escala como 10^precisão
+    mpf_set_ui(escala, 10);
+    mpf_pow_ui(escala, escala, precisao);
+
+    // Multiplica o valor pela escala
+    mpf_mul(temp, input, escala);
+
+    // Arredonda para o inteiro mais próximo para cima
+    mpf_floor(temp, temp);
+
+    // Divide de volta pela escala
+    mpf_div(temp, temp, escala);
+
+    // Define o resultado
+    mpf_set(resultado, temp);
+}
+
+// União para pegar a representação inteira de um ponto flutuante
+typedef union 
+{
+    double d;
+    uint64_t i;
+} DoubleIntUnion;
+
+// Função para converter mpf_t para uint64_t
+uint64_t mpf_to_uint64(mpf_t num)
+{
+    DoubleIntUnion u;
+    u.d = mpf_get_d(num);
+    return u.i;
+}
+
+// Função para calcular a diferença em ULPs
+uint64_t calcula_dif_ulps(mpf_t a, mpf_t b) 
+{
+    uint64_t int_a = mpf_to_uint64(a);
+    uint64_t int_b = mpf_to_uint64(b);
+    return int_a - int_b;
 }
 
 int main() 
 {
     long long int flops = 0;
     double tolerancia;
+    int n;
     mpf_set_default_prec(1024); // Precisão padrão - 1024
 
-    mpf_t pi_aprox_cima, pi_anterior_cima, erro_aproximado_cima, erro_exato_cima, numerador, numerador_ant, denominador, termo, mpf_tolerancia;
-    mpf_t fatorial_n, fatorial_n_ant;
+    mpf_t numerador, numerador_ant, denominador, termo, mpf_tolerancia;
+    mpf_t fatorial_n, fatorial_n_ant, fatorial_denominador, fatorial_denominador_ant;
     mpf_t pi_aprox_baixo, pi_anterior_baixo, erro_aproximado_baixo, erro_exato_baixo;
+    mpf_t pi_aprox_cima, pi_anterior_cima, erro_aproximado_cima, erro_exato_cima;
 
-    mpf_inits(pi_aprox_cima, pi_anterior_cima, erro_aproximado_cima, erro_exato_cima, numerador, numerador_ant, fatorial_n, fatorial_n_ant, denominador, termo, mpf_tolerancia, NULL);
+    mpf_inits(numerador, numerador_ant, denominador, termo, mpf_tolerancia, NULL);
+    mpf_inits(fatorial_n, fatorial_n_ant, fatorial_denominador, fatorial_denominador_ant, NULL);
     mpf_inits(pi_aprox_baixo, pi_anterior_baixo, erro_aproximado_baixo, erro_exato_baixo, NULL);
+    mpf_inits(pi_aprox_cima, pi_anterior_cima, erro_aproximado_cima, erro_exato_cima, NULL);
 
-    printf("Digite a tolerância: ");
     scanf("%lf", &tolerancia);
     mpf_set_d(mpf_tolerancia, tolerancia);
 
     // Arredondamento para baixo
     fesetround(FE_DOWNWARD);
-    int n = 0;
+    n = 0;
+    mpf_set_ui(numerador, 1);
+    mpf_set(numerador_ant, numerador);
+    mpf_set_ui(fatorial_n, 1);
+    mpf_set(fatorial_n_ant, fatorial_n);
+    mpf_set_ui(fatorial_denominador, 1);
+    mpf_set(fatorial_denominador_ant, fatorial_denominador);
     do 
     {
         mpf_set(pi_anterior_baixo, pi_aprox_baixo);
 
         // Numerador
         // 2^n
-        mpf_set_ui(numerador, 1);
-        for (int i = 0; i < n; i++)
-            mpf_mul_ui(numerador, numerador, 2);
+        if (n > 0)
+        {
+            mpf_mul_ui(numerador, numerador_ant, 2);
+            flops++;
+            mpf_set(numerador_ant, numerador);
+        }
 
         // n!
-        mpf_t fatorial_n;
-        mpf_init(fatorial_n);
-        fatorial(fatorial_n, n, &flops);
+        if (n > 0)
+        {
+            mpf_mul_ui(fatorial_n, fatorial_n_ant, n);
+            flops++;
+            mpf_set(fatorial_n_ant, fatorial_n);
+        }
 
         // 2^n*n!*n!
         mpf_mul(numerador, numerador, fatorial_n);
+        flops++;
         mpf_mul(numerador, numerador, fatorial_n);
+        flops++;
 
         // Denominador - (2n + 1)!
-        fatorial(denominador, 2 * n + 1, &flops);
+        if (n > 0)
+        {
+           // Faz duas vezes porque o fatorial do denominador vai subindo de 2 em 2 a cada n
+
+            mpf_mul_ui(fatorial_denominador, fatorial_denominador_ant, 2*n+1);
+            flops++;
+            mpf_set(fatorial_denominador_ant, fatorial_denominador);
+
+            mpf_mul_ui(fatorial_denominador, fatorial_denominador_ant, 2*n);
+            flops++;
+            mpf_set(fatorial_denominador_ant, fatorial_denominador);
+        }
 
         // Numerador / Denominador
-        mpf_div(termo, numerador, denominador);
+        mpf_div(termo, numerador, fatorial_denominador);
+        flops++;
 
         // Soma o termo obtido no somatório na aprox total
         mpf_add(pi_aprox_baixo, pi_aprox_baixo, termo);
+        flops++;
 
         // Erro aproximado de N com N - 1
         mpf_sub(erro_aproximado_baixo, pi_aprox_baixo, pi_anterior_baixo);
+        flops++;
         mpf_abs(erro_aproximado_baixo, erro_aproximado_baixo);
 
+        // Verifica se o erro está dentro da tolerância antes de arredondar
+        if (mpf_cmp(erro_aproximado_baixo, mpf_tolerancia) <= 0)
+            break;
+
+        // Arredonda para cima com base na tolerância
+        arredonda_baixo_tolerancia(pi_aprox_baixo, pi_aprox_baixo, mpf_tolerancia);
+
         n++;
-
-        // gmp_printf("------Iteração: %d\n", n - 1);
-        // gmp_printf("Numerador: %.Ff\n", numerador);
-        // gmp_printf("Denominador: %.Ff\n", denominador);
-        // gmp_printf("Pi aprox: %.15Fe\n", pi_aprox_baixo);
-        // gmp_printf("Erro relativo: %.15Fe\n\n", erro_aproximado_baixo);
-
-        mpf_clear(fatorial_n);
+        flops++; // Da comparação feita no while
     } 
-    while (mpf_cmp(erro_aproximado_baixo, mpf_tolerancia) > 0);
+    while (1);
 
     mpf_mul_ui(pi_aprox_baixo, pi_aprox_baixo, 2); // Porque a fórmula é pi/2
+    flops++;
     mpf_set_d(erro_exato_baixo, M_PI);
     mpf_sub(erro_exato_baixo, erro_exato_baixo, pi_aprox_baixo);
+    flops++;
     mpf_abs(erro_exato_baixo, erro_exato_baixo);
 
     // Arredondamento para cima
@@ -96,6 +197,8 @@ int main()
     mpf_set(numerador_ant, numerador);
     mpf_set_ui(fatorial_n, 1);
     mpf_set(fatorial_n_ant, fatorial_n);
+    mpf_set_ui(fatorial_denominador, 1);
+    mpf_set(fatorial_denominador_ant, fatorial_denominador);
     do 
     {
         mpf_set(pi_anterior_cima, pi_aprox_cima);
@@ -124,10 +227,21 @@ int main()
         flops++;
 
         // Denominador - (2n + 1)!
-        fatorial(denominador, 2 * n + 1, &flops);
+        if (n > 0)
+        {
+           // Faz duas vezes porque o fatorial do denominador vai subindo de 2 em 2 a cada n
+
+            mpf_mul_ui(fatorial_denominador, fatorial_denominador_ant, 2*n+1);
+            flops++;
+            mpf_set(fatorial_denominador_ant, fatorial_denominador);
+
+            mpf_mul_ui(fatorial_denominador, fatorial_denominador_ant, 2*n);
+            flops++;
+            mpf_set(fatorial_denominador_ant, fatorial_denominador);
+        }
 
         // Numerador / Denominador
-        mpf_div(termo, numerador, denominador);
+        mpf_div(termo, numerador, fatorial_denominador);
         flops++;
 
         // Soma o termo obtido no somatório na aprox total
@@ -139,17 +253,17 @@ int main()
         flops++;
         mpf_abs(erro_aproximado_cima, erro_aproximado_cima);
 
+        // Verifica se o erro está dentro da tolerância antes de arredondar
+        if (mpf_cmp(erro_aproximado_cima, mpf_tolerancia) <= 0)
+            break;
+
+        // Arredonda para cima com base na tolerância
+        arredonda_cima_tolerancia(pi_aprox_cima, pi_aprox_cima, mpf_tolerancia);
+
         n++;
-
-        // gmp_printf("------Iteração: %d\n", n - 1);
-        // gmp_printf("Numerador: %.Ff\n", numerador);
-        // gmp_printf("Denominador: %.Ff\n", denominador);
-        // gmp_printf("Pi aprox: %.15Fe\n", pi_aprox_cima);
-        // gmp_printf("Erro relativo: %.15Fe\n\n", erro_aproximado_cima);
-
         flops++; // Da comparação feita no while
     } 
-    while (mpf_cmp(erro_aproximado_cima, mpf_tolerancia) > 0);
+    while (1);
 
     mpf_mul_ui(pi_aprox_cima, pi_aprox_cima, 2); // Porque a fórmula é pi/2
     flops++;
@@ -170,14 +284,15 @@ int main()
     unsigned long long int erro_exato_cima_hex = *(unsigned long long int*)&erro_exato_cima_d;
     unsigned long long int pi_aprox_baixo_hex = *(unsigned long long int*)&pi_aprox_baixo_d;
 
+    int64_t ulps_int = calcula_dif_ulps(pi_aprox_cima, pi_aprox_baixo);
+
     printf("%d\n", n);
     printf("%.15e %llX\n", erro_aproximado_cima_d, erro_aproximado_cima_hex);
     printf("%.15e %llX\n", erro_exato_cima_d, erro_exato_cima_hex);
-    printf("%.15e %llX\n", pi_aprox_cima_d, pi_aprox_cima_hex);
-    printf("%.15e %llX\n", pi_aprox_baixo_d, pi_aprox_baixo_hex);
+    printf("%.25e %llX\n", pi_aprox_baixo_d, pi_aprox_baixo_hex);
+    printf("%.25e %llX\n", pi_aprox_cima_d, pi_aprox_cima_hex);
+    printf("%ld\n", ulps_int);
     printf("%lld\n", flops);
-
-    mpf_clears(pi_aprox_cima, pi_anterior_cima, erro_aproximado_cima, erro_exato_cima, numerador, denominador, termo, mpf_tolerancia, NULL);
 
     return 0;
 }
